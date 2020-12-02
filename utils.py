@@ -211,9 +211,10 @@ class Segmentation:
             
             
 def patch_generator(param_dict):
-    '''accepts file path variables: "tif_10m", "tif_20m", "vectors"'''
+    '''accepts file path variables: "tif_10m", "tif_20m", "vectors", "s1tif_20m"'''
     dataset_10=rasterio.open(param_dict['tif_10m'])
-    dataset_20=rasterio.open(param_dict['tif_20m'])    
+    dataset_20=rasterio.open(param_dict['tif_20m'])
+    datasets1_20=rasterio.open(param_dict['s1tif_20m']) 
     bands_10=dataset_10.descriptions
     bands_20=dataset_20.descriptions
     shp = fiona.open(param_dict['vectors'], layer=0)
@@ -222,19 +223,23 @@ def patch_generator(param_dict):
         if geom.area<100: continue
         wnd_10=features.geometry_window(dataset_10,[geojson],pad_x=6,pad_y=6, north_up=True, rotated=False, pixel_precision=3)
         wnd_20=features.geometry_window(dataset_20,[geojson],pad_x=3,pad_y=3, north_up=True, rotated=False, pixel_precision=3)
+        wnds1_20=features.geometry_window(datasets1_20,[geojson],pad_x=3,pad_y=3, north_up=True, rotated=False, pixel_precision=3)
         
         
         offs_10=dataset_10.transform*(wnd_10.col_off,wnd_10.row_off)
         offs_20=dataset_20.transform*(wnd_20.col_off,wnd_20.row_off)
+
         
         
         transf_10=list(dataset_10.transform)[:-3]
         transf_20=list(dataset_20.transform)[:-3]
+
         transf_10[2]=offs_10[0]
         transf_10[5]=offs_10[1]
         
         transf_20[2]=offs_20[0]
         transf_20[5]=offs_20[1]
+        
         
                 
 #         transf_10=dataset_10.transform.translation(*offs_10)
@@ -242,18 +247,20 @@ def patch_generator(param_dict):
         
         patch_10=dataset_10.read(window=wnd_10)
         patch_20=dataset_20.read(window=wnd_20)
+        patchs1_20=datasets1_20.read(window=wnds1_20).squeeze()
         if 'B4'in bands_10 and 'B3' in bands_10 and 'B2' in bands_10:
             rgb_bands=[bands_10.index(bnum) for bnum in ['B4','B3','B2']]
         else: rgb_bands=[2,1,0]
         rgb=(np.moveaxis(patch_10,0,2))[:,:,rgb_bands]
         rgb=np.ceil(rgb/2500*255).astype('uint8')        
     
-        yield {'patch_10':patch_10,'patch_20':patch_20,'rgb_10':rgb, 'geojson':geojson,'transf_10':transf_10,'transf_20':transf_20, 'crs':dataset_10.crs}
+        yield {'patch_10':patch_10,'patch_20':patch_20,'patchs1_20':patchs1_20,'rgb_10':rgb, 'geojson':geojson,'transf_10':transf_10,'transf_20':transf_20, 'crs':dataset_10.crs}
         
 
 def supres_generator(list_of_param_dict):
     import tensorflow as tf
     import os
+    import numpy as np
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'    
@@ -274,6 +281,7 @@ def supres_generator(list_of_param_dict):
     
     for param_dict in list_of_param_dict:
         rgb5=(rescale(unsharp_mask(resolve_single(pre_generator, param_dict['rgb_10']), radius=3, amount=1,multichannel=True,), 0.5,multichannel=True,anti_aliasing=True)*255).astype('uint8')
+        rgb5=np.clip(rgb5,1,255)
         transf_rgb5=list(param_dict['transf_10'])
         transf_rgb5[0]*=0.5
         transf_rgb5[4]*=0.5
