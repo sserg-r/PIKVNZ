@@ -218,6 +218,9 @@ def patch_generator(param_dict):
     bands_10=dataset_10.descriptions
     bands_20=dataset_20.descriptions
     shp = fiona.open(param_dict['vectors'], layer=0)
+    vect_meta=shp.meta
+    
+    
     for geojson in iter(shp):
         geom=shape(geojson['geometry'])
         if geom.area<100: continue
@@ -254,7 +257,7 @@ def patch_generator(param_dict):
         rgb=(np.moveaxis(patch_10,0,2))[:,:,rgb_bands]
         rgb=np.ceil(rgb/2500*255).astype('uint8')        
     
-        yield {'patch_10':patch_10,'patch_20':patch_20,'patchs1_20':patchs1_20,'rgb_10':rgb, 'geojson':geojson,'transf_10':transf_10,'transf_20':transf_20, 'crs':dataset_10.crs}
+        yield {'patch_10':patch_10,'patch_20':patch_20,'patchs1_20':patchs1_20,'rgb_10':rgb, 'geojson':geojson,'transf_10':transf_10,'transf_20':transf_20, 'crs':dataset_10.crs, 'vect_meta':vect_meta}
         
 
 def supres_generator(list_of_param_dict):
@@ -289,8 +292,165 @@ def supres_generator(list_of_param_dict):
         param_dict['transf_5']=transf_rgb5
         yield param_dict          
         
-        
 
+        
+        
+def simple_rescale(im, scf=2):
+    'rescale image'
+    import numpy as np    
+    row,col=im.shape[0],im.shape[1]
+    return np.array([[im[int(r/scf)][int(c/scf)] for c in range(col*scf)] for r in range(row*scf)])
+
+# classification section
+
+def class_generator(list_of_param_dict, rf_model_path='./model/RF_model.pkl'):
+    import pickle
+    
+    import numpy as np
+    import scipy
+    
+    with open(rf_model_path, 'rb') as f:
+        clf=pickle.load(f)
+    
+    
+    for param_dict in list_of_param_dict:        
+        segm=param_dict['segments_5']
+        transf_10=param_dict['transf_10']
+        transf_20=param_dict['transf_20']
+        patch_10=np.rollaxis(param_dict['patch_10'],0,3)
+        patch_20=np.rollaxis(param_dict['patch_20'],0,3)
+        patchs1_20=param_dict['patchs1_20']
+
+
+        x10,y10,_=patch_10.shape
+        y_sh,x_sh=np.abs(np.array([transf_10,transf_20]).T.dot(np.array([-1,1]))[[2,5]]/10).astype(int)
+        patch_20to10=simple_rescale(patch_20)[x_sh:x_sh+x10,y_sh:y_sh+y10,:]
+        feat_image=simple_rescale(np.concatenate((patch_10, patch_20to10), axis=2))
+
+
+        patchs1_20to10=simple_rescale(patchs1_20)[x_sh:x_sh+x10,y_sh:y_sh+y10]
+        patchs1_5=simple_rescale(patchs1_20to10)    #sent1 5m patch
+
+        remap={}
+        for index in np.unique(segm.ravel()):
+            if index==0: continue        
+            nm_pix=len(segm[segm==index])//4
+        #     nm_samples=np.ceil((np.log(nm_pix)/np.log(2))**1.6).astype(int) 
+            nm_samples=nm_pix
+            id_choises=np.random.choice(range(nm_pix),nm_samples,replace=False)    
+    #         is_candidate=(patchs1_5[segm==index].mean()+0.71).astype(int)
+            is_candidate=(patchs1_5[segm==index].mean()+0.51).astype(int)
+        #     is_candidate=(patchs1_5[segm==index][id_choises].mean()+0.6).astype(int)
+            if not is_candidate:
+                remap[index]=0
+                continue   
+
+        #     featured_items=feat_image[segm==index][id_choises]
+            featured_items=feat_image[segm==index]
+            cl=scipy.stats.mode(sorted(clf.predict(featured_items))).mode[0]
+            remap[index]=cl
+        src, values = remap.keys(), remap.values()
+        d_array = np.arange(segm.max() + 1)
+        d_array[list(src)] = list(values)
+        class_image=d_array[segm]     
+        class_image[segm==0]=-1   
+        param_dict['classes']=class_image
+        yield param_dict
+
+
+# vectorization section
+
+def nearest_ind(ind_neig,ind_cand):
+    import numpy as np
+    class_generator
+    Xn=ind_neig[:,0]
+    Yn=ind_neig[:,1]
+    Xc=ind_cand[:,0]
+    Yc=ind_cand[:,1]
+    Xn=np.stack([-np.ones_like(Xn),Xn])
+    Xc=np.stack([Xc, np.ones_like(Xc)])
+    Xdist=Xn.T.dot(Xc)    
+    Yn=np.stack([-np.ones_like(Yn),Yn])
+    Yc=np.stack([Yc, np.ones_like(Yc)])
+    Ydist=Yn.T.dot(Yc) 
+    return np.argmin((Xdist**2+Ydist**2),axis=0)
+
+def expand_im(im, mask_val=-1):
+    import numpy as np
+    from scipy.ndimage import binary_erosion
+    mask=np.copy(im)
+    mask[mask!=mask_val]=1
+    mask[mask==mask_val]=0
+    neig_mask=binary_erosion(mask)-mask
+    indarr=np.indices(mask.shape)
+
+    XYn=np.rollaxis(indarr,0,3)[neig_mask==-1]
+    XYc=np.rollaxis(indarr,0,3)[mask==0]
+
+    gg=nearest_ind(XYn,XYc)
+    ccl=np.copy(im)
+    ccl[XYc[:,0],XYc[:,1]]=ccl[XYn[gg][:,0],XYn[gg][:,1]]
+    return ccl   
+
+def vectors_generator(list_of_param_dict):
+    from shapely.geometry import shape
+#     from scipy import ndimage
+    import rasterio
+    import shapely
+    import copy
+    import numpy as np
+    for param_dict in list_of_param_dict:
+        cl1=expand_im(param_dict['classes']) 
+        
+        inshp=dict(param_dict['geojson'])        
+        outline=shape(inshp['geometry'])        
+        
+        trans=np.array(param_dict['transf_5']).reshape((2,3))
+
+        mypoly=[]
+
+        for vec in rasterio.features.shapes(cl1.astype('int16')):
+            multpl=vec[0]['coordinates']
+            for i in range(len(multpl)):
+                poly=multpl[i]
+                poly=[tuple(trans.dot([x,y,1])) for x,y in poly]
+                vec[0]['coordinates'][i]=poly
+            shp=shape(vec[0])        
+            shp=shp.intersection(outline)
+
+            if shp.geom_type in['MultiPolygon','GeometryCollection']:
+                if len(shp)==0: continue
+                shps=[pol for pol in shp]
+            else: shps=[shp]
+            for shp in shps:
+                outshp=copy.deepcopy(dict(inshp))
+                outshp['properties']['class']=int(vec[1])
+#                 prop= copy.deepcopy(inshp['properties'])    
+#                 prop['class']=int(vec[1])
+                
+                outshp['geometry']= shapely.geometry.mapping(shp)
+#                 outshp['properties']=prop
+                mypoly.append(outshp) 
+
+        param_dict['classed_geojson']=mypoly
+        yield param_dict
+
+
+        
+        
+#write vektors to shp
+def write_to_shape(vectorized_items, shp_path):
+    import copy
+    import fiona
+    polygs=[item for dct in vectorized_items for item in dct['classed_geojson']]
+    meta=vectorized_items[0]['vect_meta']
+    meta['schema']['properties']['class']='int:10'
+    with fiona.open(shp_path, 'w',**meta) as sink:
+        for poly in polygs:    
+            sink.write(poly)         
+        
+        
+        
         
         
         
