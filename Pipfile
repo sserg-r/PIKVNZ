@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+tensorflow = "==2.7.0"
+protobuf = "==3.16.0"
+ipykernel = "*"
+matplotlib = "*"
+scikit-image = "==0.16.2"
+scikit-learn = "*"
+rasterio = "*"
+fiona = "*"
+shapely = "*"
+Pillow = "*"
+scipy = "*"
+tqdm = "*"
+higra = "*"
+ipywidgets = "*"
+
+[dev-packages]
+ipykernel = "*"
+
+[requires]
+python_version = "3.8"

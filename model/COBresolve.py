@@ -1,9 +1,13 @@
 class COBresolve_image:
     import tensorflow as tf
     import os
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'   
+    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    physical_devices = tf.config.list_physical_devices('GPU')
+    try:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    except:       
+        pass
 
     
     def __init__(self, COBmodel):

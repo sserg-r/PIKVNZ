@@ -264,9 +264,13 @@ def supres_generator(list_of_param_dict):
     import tensorflow as tf
     import os
     import numpy as np
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'    
+    # physical_devices = tf.config.experimental.list_physical_devices('GPU')    
+    physical_devices = tf.config.list_physical_devices('GPU')
+    try:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    except:       
+        pass 
     
     
     from model import generator

@@ -1,5 +1,7 @@
-from tensorflow.python.keras.layers import Add, Conv2D, Input, PReLU, Lambda, BatchNormalization
-from tensorflow.python.keras.models import Model
+# from tensorflow.python.keras.layers import Add, Conv2D, Input, PReLU, Lambda, BatchNormalization
+# from tensorflow.python.keras.models import Model
+from tensorflow.keras.layers import Add, Conv2D, Input, PReLU, Lambda, BatchNormalization
+from tensorflow.keras.models import Model
 
 from model.common import subpixel_conv2d, normalize_01, denormalize_m11
 
