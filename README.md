@@ -1,7 +1,7 @@
 Model for finding and classifying unused parcels within agricultural land.
 
-weights files
-https://drive.google.com/drive/folders/1K3Cqb_CW_gORE2B8L8ZVNNJL1prq3LeB?usp=sharing
+weights & demo
+https://drive.google.com/file/d/1-r_ZZqbL7XaW8RYBq6CIkzpIzbAwuDB7/view?usp=sharing
 
-demo files
-https://drive.google.com/drive/folders/132MNyaPy_Sa9qwKYcAxx-1bS5zAsnB7I?usp=sharing
+unpack zip content into project's folder
+to see an example run demo.ipynb

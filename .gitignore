@@ -1,4 +1,6 @@
-/demo
-/weights
+/demo/*
+/weights/*
 /__pycashe__
 .ipynb_checkpoints
+Pipfile.lock
+/demo_trash
