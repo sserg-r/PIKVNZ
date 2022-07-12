@@ -2,5 +2,6 @@
 /weights/*
 /__pycashe__
 .ipynb_checkpoints
-Pipfile.lock
 /demo_trash
+.gitignore
+Pipfile.lock
